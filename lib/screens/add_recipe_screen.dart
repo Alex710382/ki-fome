@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ki_fome/models/recipe.dart';
 import 'package:ki_fome/providers/recipe_provider.dart';
+import 'package:image_picker/image_picker.dart'; // Importar o image_picker
+import 'dart:io'; // Para File
+import 'package:path_provider/path_provider.dart'; // Para getApplicationDocumentsDirectory
+import 'package:path/path.dart' as p; // Para manipulação de caminhos
 
 class AddRecipeScreen extends StatefulWidget {
   const AddRecipeScreen({super.key});
@@ -12,18 +16,13 @@ class AddRecipeScreen extends StatefulWidget {
 }
 
 class _AddRecipeScreenState extends State<AddRecipeScreen> {
-  final _formKey = GlobalKey<FormState>(); // Chave para validar o formulário
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _imageUrlController = TextEditingController();
   final _prepTimeController = TextEditingController();
-  final _ingredientsController =
-      TextEditingController(); // Para múltiplos ingredientes
-  final _instructionsController =
-      TextEditingController(); // Para múltiplas instruções
+  final _ingredientsController = TextEditingController();
+  final _instructionsController = TextEditingController();
 
-  String _selectedCategory = 'Salgadas'; // Valor padrão para a categoria
-
-  // Lista de categorias disponíveis
+  String _selectedCategory = 'Salgadas';
   final List<String> _categories = [
     'Salgadas',
     'Doces',
@@ -33,26 +32,83 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
     'Outros',
   ];
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _imageUrlController.dispose();
-    _prepTimeController.dispose();
-    _ingredientsController.dispose();
-    _instructionsController.dispose();
-    super.dispose();
+  XFile? _pickedImage; // Para armazenar a imagem temporariamente
+  String?
+  _imagePathForRecipe; // O caminho final da imagem para a receita no Hive
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: source,
+      imageQuality: 80,
+    ); // Qualidade da imagem
+
+    if (pickedFile != null) {
+      setState(() {
+        _pickedImage = pickedFile;
+        // O _imagePathForRecipe será definido ao salvar a imagem localmente no _submitRecipe
+      });
+    }
   }
 
-  void _submitRecipe() {
+  void _showImageSourceActionSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Galeria'),
+                onTap: () {
+                  _pickImage(ImageSource.gallery);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Câmera'),
+                onTap: () {
+                  _pickImage(ImageSource.camera);
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Novo método para salvar a imagem no diretório da aplicação
+  Future<String> _saveImageLocally(XFile imageFile) async {
+    final appDocumentDir = await getApplicationDocumentsDirectory();
+    // Cria um subdiretório para imagens de receita se não existir
+    final recipeImagesDir = Directory(
+      p.join(appDocumentDir.path, 'recipe_images'),
+    );
+    if (!await recipeImagesDir.exists()) {
+      await recipeImagesDir.create(recursive: true);
+    }
+
+    final fileName =
+        '${DateTime.now().millisecondsSinceEpoch}_${p.basename(imageFile.path)}'; // Nome único
+    final localPath = p.join(recipeImagesDir.path, fileName);
+
+    final newImage = await File(
+      imageFile.path,
+    ).copy(localPath); // Copia a imagem para o novo local
+    return newImage.path; // Retorna o caminho permanente
+  }
+
+  void _submitRecipe() async {
+    // Tornar o método async
     if (_formKey.currentState!.validate()) {
       final String name = _nameController.text;
-      final String imageUrl =
-          _imageUrlController.text.isEmpty
-              ? 'assets/images/default_recipe.jpg' // Imagem padrão se o usuário não fornecer
-              : _imageUrlController.text;
       final int prepTime = int.tryParse(_prepTimeController.text) ?? 0;
 
-      // Divide os ingredientes e instruções por nova linha, removendo espaços vazios
       final List<String> ingredients =
           _ingredientsController.text
               .split('\n')
@@ -77,10 +133,20 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
         return;
       }
 
+      String finalImagePath;
+      if (_pickedImage != null) {
+        // Se uma imagem foi selecionada, salve-a localmente
+        finalImagePath = await _saveImageLocally(_pickedImage!);
+      } else {
+        // Se nenhuma imagem foi selecionada, use a imagem padrão do asset
+        finalImagePath =
+            'assets/images/default_recipe.jpg'; // Certifique-se de ter esta imagem no seu assets/images
+      }
+
       final newRecipe = Recipe(
         id: '', // O ID será gerado no Provider
         name: name,
-        imageUrl: imageUrl,
+        imageUrl: finalImagePath, // Usar o caminho da imagem final
         prepTimeMinutes: prepTime,
         ingredients: ingredients,
         instructions: instructions,
@@ -96,6 +162,15 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
 
       Navigator.pop(context); // Volta para a tela anterior
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _prepTimeController.dispose();
+    _ingredientsController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
   }
 
   @override
@@ -120,11 +195,59 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _imageUrlController,
-                decoration: const InputDecoration(
-                  labelText:
-                      'URL da Imagem (opcional, ou caminho local, ex: assets/images/pizza.jpg)',
+              // Área para seleção da imagem
+              GestureDetector(
+                onTap: () => _showImageSourceActionSheet(context),
+                child: Container(
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  alignment: Alignment.center,
+                  child:
+                      _pickedImage != null
+                          ? Image.file(
+                            // Exibe a imagem selecionada do picker
+                            File(_pickedImage!.path),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          )
+                          : (_imagePathForRecipe != null &&
+                              _imagePathForRecipe!.startsWith(
+                                'assets/',
+                              )) // Verifica se é um asset (para o caso de edição futura, se o _imagePathForRecipe for pré-preenchido)
+                          ? Image.asset(
+                            _imagePathForRecipe!, // Exibe a imagem padrão se nenhuma for selecionada e não houver _pickedImage
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            errorBuilder:
+                                (context, error, stackTrace) => const Icon(
+                                  Icons.image,
+                                  size: 80,
+                                  color: Colors.grey,
+                                ),
+                          )
+                          : const Column(
+                            // Placeholder se nenhuma imagem foi selecionada
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.add_a_photo,
+                                size: 50,
+                                color: Colors.grey,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Tocar para adicionar imagem',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -150,8 +273,9 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Ingredientes (um por linha)',
                   alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
                 ),
-                maxLines: null, // Múltiplas linhas
+                maxLines: null,
                 keyboardType: TextInputType.multiline,
                 validator: (value) {
                   if (value == null || value.isEmpty || value.trim().isEmpty) {
@@ -166,8 +290,9 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Modo de Preparo (um passo por linha)',
                   alignLabelWithHint: true,
+                  border: OutlineInputBorder(),
                 ),
-                maxLines: null, // Múltiplas linhas
+                maxLines: null,
                 keyboardType: TextInputType.multiline,
                 validator: (value) {
                   if (value == null || value.isEmpty || value.trim().isEmpty) {
