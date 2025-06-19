@@ -191,13 +191,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
               : GridView.builder(
-                padding: const EdgeInsets.all(10.0),
+                padding: const EdgeInsets.all(8.0),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  crossAxisSpacing: 10.0,
-                  mainAxisSpacing: 10.0,
+                  crossAxisSpacing: 2.0,
+                  mainAxisSpacing: 2.0,
                   childAspectRatio:
-                      0.75, // Ajuste se precisar para o tamanho do card
+                      0.6, // Ajuste se precisar para o tamanho do card
                 ),
                 itemCount: filteredRecipes.length,
                 itemBuilder: (context, index) {
