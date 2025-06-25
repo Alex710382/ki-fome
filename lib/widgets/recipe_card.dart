@@ -13,7 +13,7 @@ class RecipeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // Determine se a imagem é um asset (caminho começa com 'assets/') ou um arquivo local
     Widget imageWidget;
-    if (recipe.imageUrl.startsWith('assets/')) {
+    if (recipe.imageUrl.startsWith('assets/images/')) {
       imageWidget = Image.asset(
         recipe.imageUrl,
         height: 180,

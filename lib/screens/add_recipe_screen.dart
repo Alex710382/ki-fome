@@ -3,13 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ki_fome/models/recipe.dart';
 import 'package:ki_fome/providers/recipe_provider.dart';
-import 'package:image_picker/image_picker.dart'; // Importar o image_picker
-import 'dart:io'; // Para File
-import 'package:path_provider/path_provider.dart'; // Para getApplicationDocumentsDirectory
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p; // Para manipulação de caminhos
 
 class AddRecipeScreen extends StatefulWidget {
-  const AddRecipeScreen({super.key});
+  final Recipe? recipeToEdit; // Torna a receita opcional para edição
+
+  const AddRecipeScreen({
+    super.key,
+    this.recipeToEdit,
+  }); // Construtor com parâmetro opcional
 
   @override
   State<AddRecipeScreen> createState() => _AddRecipeScreenState();
@@ -22,7 +27,7 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
   final _ingredientsController = TextEditingController();
   final _instructionsController = TextEditingController();
 
-  String _selectedCategory = 'Salgadas';
+  String _selectedCategory = 'Salgadas'; // Valor padrão
   final List<String> _categories = [
     'Salgadas',
     'Doces',
@@ -34,133 +39,28 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
 
   XFile? _pickedImage; // Para armazenar a imagem temporariamente
   String?
-  _imagePathForRecipe; // O caminho final da imagem para a receita no Hive
+  _imageUrl; // Para armazenar o caminho final da imagem (asset ou File path)
 
-  Future<void> _pickImage(ImageSource source) async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: source,
-      imageQuality: 80,
-    ); // Qualidade da imagem
+  bool _isEditing = false; // Flag para saber se estamos editando
 
-    if (pickedFile != null) {
-      setState(() {
-        _pickedImage = pickedFile;
-        // O _imagePathForRecipe será definido ao salvar a imagem localmente no _submitRecipe
-      });
-    }
-  }
-
-  void _showImageSourceActionSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Galeria'),
-                onTap: () {
-                  _pickImage(ImageSource.gallery);
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Câmera'),
-                onTap: () {
-                  _pickImage(ImageSource.camera);
-                  Navigator.pop(context);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // Novo método para salvar a imagem no diretório da aplicação
-  Future<String> _saveImageLocally(XFile imageFile) async {
-    final appDocumentDir = await getApplicationDocumentsDirectory();
-    // Cria um subdiretório para imagens de receita se não existir
-    final recipeImagesDir = Directory(
-      p.join(appDocumentDir.path, 'recipe_images'),
-    );
-    if (!await recipeImagesDir.exists()) {
-      await recipeImagesDir.create(recursive: true);
-    }
-
-    final fileName =
-        '${DateTime.now().millisecondsSinceEpoch}_${p.basename(imageFile.path)}'; // Nome único
-    final localPath = p.join(recipeImagesDir.path, fileName);
-
-    final newImage = await File(
-      imageFile.path,
-    ).copy(localPath); // Copia a imagem para o novo local
-    return newImage.path; // Retorna o caminho permanente
-  }
-
-  void _submitRecipe() async {
-    // Tornar o método async
-    if (_formKey.currentState!.validate()) {
-      final String name = _nameController.text;
-      final int prepTime = int.tryParse(_prepTimeController.text) ?? 0;
-
-      final List<String> ingredients =
-          _ingredientsController.text
-              .split('\n')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)
-              .toList();
-      final List<String> instructions =
-          _instructionsController.text
-              .split('\n')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)
-              .toList();
-
-      if (ingredients.isEmpty || instructions.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Por favor, adicione pelo menos um ingrediente e uma instrução.',
-            ),
-          ),
-        );
-        return;
-      }
-
-      String finalImagePath;
-      if (_pickedImage != null) {
-        // Se uma imagem foi selecionada, salve-a localmente
-        finalImagePath = await _saveImageLocally(_pickedImage!);
-      } else {
-        // Se nenhuma imagem foi selecionada, use a imagem padrão do asset
-        finalImagePath =
-            'assets/images/default_recipe.jpg'; // Certifique-se de ter esta imagem no seu assets/images
-      }
-
-      final newRecipe = Recipe(
-        id: '', // O ID será gerado no Provider
-        name: name,
-        imageUrl: finalImagePath, // Usar o caminho da imagem final
-        prepTimeMinutes: prepTime,
-        ingredients: ingredients,
-        instructions: instructions,
-        category: _selectedCategory,
-        isFavorite: false, // Nova receita não é favorita por padrão
+  @override
+  void initState() {
+    super.initState();
+    if (widget.recipeToEdit != null) {
+      _isEditing = true;
+      // Preenche os campos com os dados da receita para edição
+      _nameController.text = widget.recipeToEdit!.name;
+      _prepTimeController.text =
+          widget.recipeToEdit!.prepTimeMinutes.toString();
+      _ingredientsController.text = widget.recipeToEdit!.ingredients.join('\n');
+      _instructionsController.text = widget.recipeToEdit!.instructions.join(
+        '\n',
       );
-
-      Provider.of<RecipeProvider>(context, listen: false).addRecipe(newRecipe);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Receita adicionada com sucesso!')),
-      );
-
-      Navigator.pop(context); // Volta para a tela anterior
+      _selectedCategory = widget.recipeToEdit!.category;
+      _imageUrl =
+          widget.recipeToEdit!.imageUrl; // Define a URL da imagem existente
+    } else {
+      _isEditing = false;
     }
   }
 
@@ -173,96 +73,151 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source);
+
+    if (pickedFile != null) {
+      setState(() {
+        _pickedImage = pickedFile;
+        _imageUrl =
+            null; // Limpa o imageUrl existente se uma nova imagem for selecionada
+      });
+    }
+  }
+
+  Future<String?> _saveImageLocally(XFile? imageFile) async {
+    if (imageFile == null) return null;
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final fileName = p.basename(imageFile.path);
+    final savedImage = await File(
+      imageFile.path,
+    ).copy('${appDir.path}/$fileName');
+    return savedImage.path;
+  }
+
+  Future<void> _submitRecipe() async {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+
+      // Salva a nova imagem localmente se uma foi selecionada
+      final String? finalImageUrl =
+          _pickedImage != null
+              ? await _saveImageLocally(_pickedImage)
+              : (_imageUrl ??
+                  ''); // Se não selecionou nova, mantém a antiga ou vazio
+
+      final ingredientsList =
+          _ingredientsController.text
+              .split('\n')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+      final instructionsList =
+          _instructionsController.text
+              .split('\n')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+
+      final int? prepTime = int.tryParse(_prepTimeController.text);
+
+      if (prepTime == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor, insira um tempo de preparo válido.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      final recipeProvider = Provider.of<RecipeProvider>(
+        context,
+        listen: false,
+      );
+
+      if (_isEditing) {
+        // Estamos editando uma receita existente
+        final updatedRecipe = widget.recipeToEdit!.copyWith(
+          name: _nameController.text,
+          prepTimeMinutes: prepTime,
+          ingredients: ingredientsList,
+          instructions: instructionsList,
+          imageUrl: finalImageUrl,
+          category: _selectedCategory,
+          // isFavorite permanece como está no original
+        );
+        await recipeProvider.updateRecipe(updatedRecipe);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Receita atualizada com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Estamos adicionando uma nova receita
+        final newRecipe = Recipe(
+          id: recipeProvider.uuid.v4(), // Gera um novo ID
+          name: _nameController.text,
+          prepTimeMinutes: prepTime,
+          ingredients: ingredientsList,
+          instructions: instructionsList,
+          imageUrl: finalImageUrl ?? '',
+          isFavorite: false,
+          category: _selectedCategory,
+        );
+        await recipeProvider.addRecipe(newRecipe);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Receita adicionada com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      Navigator.of(context).pop(); // Volta para a tela anterior
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Adicionar Nova Receita')),
-      body: SingleChildScrollView(
+      appBar: AppBar(
+        title: Text(_isEditing ? 'Editar Receita' : 'Adicionar Nova Receita'),
+      ),
+      body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: ListView(
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Nome da Receita'),
+                decoration: const InputDecoration(
+                  labelText: 'Nome da Receita',
+                  border: OutlineInputBorder(),
+                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
-                    return 'Por favor, digite o nome da receita';
+                    return 'Por favor, insira o nome da receita';
                   }
                   return null;
                 },
-              ),
-              const SizedBox(height: 16),
-              // Área para seleção da imagem
-              GestureDetector(
-                onTap: () => _showImageSourceActionSheet(context),
-                child: Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  alignment: Alignment.center,
-                  child:
-                      _pickedImage != null
-                          ? Image.file(
-                            // Exibe a imagem selecionada do picker
-                            File(_pickedImage!.path),
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                          )
-                          : (_imagePathForRecipe != null &&
-                              _imagePathForRecipe!.startsWith(
-                                'assets/',
-                              )) // Verifica se é um asset (para o caso de edição futura, se o _imagePathForRecipe for pré-preenchido)
-                          ? Image.asset(
-                            _imagePathForRecipe!, // Exibe a imagem padrão se nenhuma for selecionada e não houver _pickedImage
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            errorBuilder:
-                                (context, error, stackTrace) => const Icon(
-                                  Icons.image,
-                                  size: 80,
-                                  color: Colors.grey,
-                                ),
-                          )
-                          : const Column(
-                            // Placeholder se nenhuma imagem foi selecionada
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.add_a_photo,
-                                size: 50,
-                                color: Colors.grey,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Tocar para adicionar imagem',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                ),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _prepTimeController,
                 decoration: const InputDecoration(
                   labelText: 'Tempo de Preparo (minutos)',
+                  border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, digite o tempo de preparo';
-                  }
-                  if (int.tryParse(value) == null || int.parse(value) < 0) {
-                    return 'Tempo inválido';
+                  if (value == null ||
+                      value.isEmpty ||
+                      int.tryParse(value) == null) {
+                    return 'Por favor, insira um tempo válido';
                   }
                   return null;
                 },
@@ -275,11 +230,10 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
                 ),
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
+                maxLines: 5,
                 validator: (value) {
-                  if (value == null || value.isEmpty || value.trim().isEmpty) {
-                    return 'Por favor, adicione os ingredientes';
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, insira os ingredientes';
                   }
                   return null;
                 },
@@ -292,14 +246,90 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
                 ),
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
+                maxLines: 7,
                 validator: (value) {
-                  if (value == null || value.isEmpty || value.trim().isEmpty) {
-                    return 'Por favor, adicione o modo de preparo';
+                  if (value == null || value.isEmpty) {
+                    return 'Por favor, insira as instruções';
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 16),
+              // Exibição da imagem selecionada ou existente
+              GestureDetector(
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    builder:
+                        (ctx) => Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.camera_alt),
+                              title: const Text('Tirar Foto'),
+                              onTap: () {
+                                _pickImage(ImageSource.camera);
+                                Navigator.of(ctx).pop();
+                              },
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.photo_library),
+                              title: const Text('Escolher da Galeria'),
+                              onTap: () {
+                                _pickImage(ImageSource.gallery);
+                                Navigator.of(ctx).pop();
+                              },
+                            ),
+                          ],
+                        ),
+                  );
+                },
+                child: Container(
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child:
+                      _pickedImage != null
+                          ? Image.file(
+                            File(_pickedImage!.path),
+                            fit: BoxFit.cover,
+                          )
+                          : (_imageUrl != null && _imageUrl!.isNotEmpty
+                              ? (_imageUrl!.startsWith('assets/')
+                                  ? Image.asset(_imageUrl!, fit: BoxFit.cover)
+                                  : Image.file(
+                                    File(_imageUrl!),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return const Center(
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          size: 50,
+                                          color: Colors.grey,
+                                        ),
+                                      );
+                                    },
+                                  ))
+                              : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.camera_alt,
+                                    size: 50,
+                                    color: Colors.grey[700],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Adicionar Imagem',
+                                    style: TextStyle(color: Colors.grey[700]),
+                                  ),
+                                ],
+                              )),
+                ),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
@@ -337,9 +367,9 @@ class _AddRecipeScreenState extends State<AddRecipeScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: const Text(
-                  'Adicionar Receita',
-                  style: TextStyle(fontSize: 18, color: Colors.white),
+                child: Text(
+                  _isEditing ? 'Salvar Alterações' : 'Adicionar Receita',
+                  style: const TextStyle(fontSize: 18, color: Colors.white),
                 ),
               ),
             ],
