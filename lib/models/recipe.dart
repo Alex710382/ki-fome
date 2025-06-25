@@ -33,7 +33,6 @@ class Recipe {
     required this.category,
   });
 
-  // ... (copyWith, fromJson, toJson - manter esses métodos)
   Recipe copyWith({
     String? id,
     String? name,
@@ -56,8 +55,6 @@ class Recipe {
     );
   }
 
-  // Note: fromJson and toJson are not strictly needed for Hive,
-  // but good to keep if you plan to fetch from an API later.
   factory Recipe.fromJson(Map<String, dynamic> json) {
     return Recipe(
       id: json['id'],

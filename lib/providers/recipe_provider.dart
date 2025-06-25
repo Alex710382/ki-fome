@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart'; // Importe Hive
 import 'package:ki_fome/models/recipe.dart';
 import 'package:ki_fome/services/recipe_service.dart';
-import 'package:uuid/uuid.dart'; // Para gerar IDs únicos (adicione no pubspec.yaml)
+import 'package:uuid/uuid.dart'; // Para gerar IDs únicos 
 
 class RecipeProvider extends ChangeNotifier {
   List<Recipe> _recipes = [];

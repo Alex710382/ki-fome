@@ -83,8 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
         }).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Ki Fome'),
+         appBar: AppBar(
+        centerTitle: true,
+        title: Image.asset(
+          'assets/images/logo.png',
+           height: 50,
+          ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60.0),
           child: Padding(
@@ -111,8 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: EdgeInsets.zero,
           children: <Widget>[
             // Cabeçalho do Drawer (opcional, mas recomendado)
-            DrawerHeader(
-              decoration: BoxDecoration(color: Theme.of(context).primaryColor),
+           DrawerHeader(
+              decoration: BoxDecoration(color: Colors.orange), // <--- Aqui está!
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
